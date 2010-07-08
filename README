@@ -1,0 +1,55 @@
+Home Page
+============
+
+See http://bitbucket.org/viranch/downpart for latest version.
+
+Introduction
+============
+
+A tool for downloading parts of files from the internet. This is mainly useful at workplaces where the down speed is very low.
+Multiple users can download different parts of the file and later join them!
+
+Pre-requisites
+==============
+
+1. Python 2.x (May work on Python 3.x)
+2. PyQt
+
+Installation
+============
+
+There is no installation as of now. Just get the source code and follow the "How to use" instructions below
+
+How To Use
+===========
+
+1. Get the code from the link mentioned in the Home section above.
+
+2. Invoke the tool by directly double-clicking the downpart.py (GUI!!!)
+
+3. Set how many users are going to be downloading the particular file and set the part number that you want to download.
+
+4. Place all of the downloaded parts in one folder and run join.py; it will generate the final output file and you are good to go!
+
+4. Select "Single User Mode" if you want to just regular-download the file.
+
+5. Report bugs or feature requests to AUTHORS. See AUTHORS for details.
+
+Features
+========
+
+1. GUI !!!
+
+2. Useful at low bandwidth workplaces/colleges.
+
+3. Also useful in downloading the file in multiple parts simultaneously on a single computer by invoking the tool multiple times, thereby reducing download time.
+
+Limitations
+===========
+
+Report!
+
+Licensing
+=========
+
+DownPart is Open Source under the GNU General Public License. See LICENSE for details.
