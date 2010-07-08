@@ -32,7 +32,6 @@ class Download (QThread):
 		self.dialog = dialog
 		self.pbar = QProgressBar()
 		self.connect (self.pbar, SIGNAL('valueChanged(int)'), self.dialog.pbar, SLOT('setValue(int)'))
-		self.connect (self, SIGNAL('error()'), self.dialog.critical)
 	
 	def run (self):
 		if not self.dialog.chdir ():
@@ -54,7 +53,6 @@ class Download (QThread):
 				return self.raiseError ('Error: Server does not support partial downloads.\nTry downloading in single-user mode.')
 			supported = False
 		except ValueError:
-#			title = 'Invalid URL'
 			if url=='':
 				msg = 'Please enter an URL!'
 			else:
@@ -109,10 +107,6 @@ class Download (QThread):
 	
 	def raiseError (self, caption):
 		self.dialog.status.setText (caption)
-#		self.dialog.title = title
-#		self.dialog.caption = caption
-#		self.dialog.downButton.setEnabled(True)
-#		self.emit (SIGNAL('error()'))
 		return None
 
 class DownDlg (QDialog):
@@ -231,9 +225,6 @@ class DownDlg (QDialog):
 	def restoreState (self):
 		self.downButton.setEnabled (True)
 		self.closeButton.setText ('Close')
-	
-	def critical (self):
-		errorBox = QMessageBox.critical (self, self.title, self.caption)
 
 app = QApplication(sys.argv)
 main = DownDlg()
