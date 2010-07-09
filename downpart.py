@@ -63,8 +63,6 @@ class Download (QThread):
 			return self.raiseError ('Error: The URL entered is invalid.')
 		except:
 			return self.raiseError ('Unknown error. Retry downloading.')
-		self.dialog.pbar.setRange (0, 10)
-		print 'range set'
 		self.dialog.status.setText ('Downloading...')
 		if not singleUser:
 			total_users = self.dialog.totalCombo.currentIndex()+1
@@ -88,12 +86,10 @@ class Download (QThread):
 			self.pbar.setRange (0, partsize)
 			self.pbar.setValue(0)
 			qt_size = qtBytes (partsize)
-			buffSize = partsize/100
 		else:
-			buffSize = 10240
 			done_size = 0
 		while True:
-			buff = src.read ( buffSize )
+			buff = src.read ( 10240 )
 			sz = len ( buff )
 			if sz == 0:
 				break
