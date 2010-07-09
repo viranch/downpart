@@ -11,20 +11,20 @@ class Join (QThread):
 		self.parent = parent
 		self.done = False
 		self.progress = QProgressBar()
-		self.connect (self.progress, SIGNAL('valueChanged(int)'), self.parent.progressBar, SLOT('setValue(int)'))
+		self.parent.connect (self.progress, SIGNAL('valueChanged(int)'), self.parent.progressBar, SLOT('setValue(int)'))
 	
 	def run (self):
 		try:
-			self.parent.status.setText ('Opening output file...')
+			self.parent.status.setText ('Starting...')
 			final = open ( self.parent.saveEdit.text(), 'wb' )
-			total = self.parent.fileList.count()
+			total = len(self.parent.files)
 			count = 0
 			for file in self.parent.files:
 				count += 1
-				self.progress.setRange (0, os.path.getsize(file))
 				size = os.path.getsize(file)
-				self.parent.progressBar.setRange (0, size)
 				self.progress.setValue (0)
+				self.progress.setRange (0, size)
+				self.parent.progressBar.setRange (0, size)
 				self.parent.status.setText ( 'Appending file ' + str(count)+'/'+str(total) + '...' )
 				part = open ( file, 'rb' )
 				while True:
@@ -49,14 +49,23 @@ class JoinDlg (QDialog):
 		self.fileList = QListWidget()
 		self.files = []
 		tmp = QDialogButtonBox (QDialogButtonBox.Open | QDialogButtonBox.Save)
-		addButton = QPushButton ( QIcon('/usr/share/icons/oxygen/16x16/actions/list-add.png'), '')
-		addButton.setMaximumWidth (30)
-		addButton.setToolTip ('Add...')
-		rmButton = QPushButton ( QIcon('/usr/share/icons/oxygen/16x16/actions/list-remove.png'), '')
-		rmButton.setMaximumWidth (30)
+		if os.access ('/usr/share/icons/oxygen/16x16/actions/list-add.png', os.F_OK):
+			addButton = QPushButton ( QIcon('/usr/share/icons/oxygen/16x16/actions/list-add.png'), '')
+			addButton.setMaximumWidth (30)
+		else:
+			addButton = QPushButton ('Add...')
+		addButton.setToolTip ('Add files...')
+		if os.access ('/usr/share/icons/oxygen/16x16/actions/list-remove.png', os.F_OK):
+			rmButton = QPushButton ( QIcon('/usr/share/icons/oxygen/16x16/actions/list-remove.png'), '')
+			rmButton.setMaximumWidth (30)
+		else:
+			rmButton = QPushButton ('Remove')
 		rmButton.setToolTip ('Remove')
-		clearButton = QPushButton ( QIcon('/usr/share/icons/oxygen/16x16/actions/edit-clear.png'), '')
-		clearButton.setMaximumWidth (30)
+		if os.access ('/usr/share/icons/oxygen/16x16/actions/edit-clear.png', os.F_OK):
+			clearButton = QPushButton ( QIcon('/usr/share/icons/oxygen/16x16/actions/edit-clear.png'), '')
+			clearButton.setMaximumWidth (30)
+		else:
+			clearButton = QPushButton ('Clear')
 		clearButton.setToolTip ('Clear All')
 		saveLabel = QLabel ('&Save to:')
 		self.saveEdit = QLineEdit()
@@ -64,15 +73,16 @@ class JoinDlg (QDialog):
 		saveButton = tmp.button (QDialogButtonBox.Save)
 		saveButton.setText ('')
 		saveButton.setMaximumWidth (30)
+		saveButton.setToolTip ('Browse...')
 		self.progressBar = QProgressBar()
-		self.status = QLabel('Select files to join and choose output file')
+		self.status = QLabel()
 		self.status.setAlignment (Qt.AlignHCenter | Qt.AlignVCenter)
 		self.buttonBox = QDialogButtonBox ( QDialogButtonBox.Ok | QDialogButtonBox.Cancel )
 		self.buttonOk = self.buttonBox.button (QDialogButtonBox.Ok)
 		self.buttonCancel = self.buttonBox.button (QDialogButtonBox.Cancel)
 		self.buttonOk.setText ('Join')
 		self.buttonCancel.setText ('Close')
-		self.thread = Join(self)
+		self.joinThread = Join(self)
 
 		grid = QGridLayout()
 		grid.addWidget (fileLabel, 0, 0)
@@ -91,37 +101,44 @@ class JoinDlg (QDialog):
 
 		self.connect (addButton, SIGNAL('clicked()'), self.getFiles)
 		self.connect (rmButton, SIGNAL('clicked()'), self.removeItems)
-		self.connect (clearButton, SIGNAL('clicked()'), self.fileList.clear)
+		self.connect (clearButton, SIGNAL('clicked()'), self.clear)
 		self.connect (saveButton, SIGNAL('clicked()'), self.getSaveFile)
 		self.connect (self.buttonOk, SIGNAL('clicked()'), self.join)
 		self.connect (self.buttonCancel, SIGNAL('clicked()'), self, SLOT('close()'))
-		self.connect (self.thread, SIGNAL('finished()'), self.setStatus)
+		self.connect (self.joinThread, SIGNAL('finished()'), self.setStatus)
 
 	def getFiles (self):
 		fileNames = QFileDialog(self).getOpenFileNames()
-		fileNames.sort()
-		self.fileList.addItems (fileNames)
-		for item in fileNames:
-			self.files.append (str(item))
-		self.progressBar.setRange (0, len(self.files))
 		self.buttonOk.setText ('Join')
 		self.buttonCancel.setText ('Close')
+		files = []
+		for i in range(len(fileNames)):
+			self.files.append (str(fileNames[i]))
+			self.fileList.addItem ( str(fileNames[i]).rsplit('/',1)[1] )
 
 	def removeItems (self):
 		x = self.fileList.currentRow()
 		self.fileList.takeItem (x)
 		self.files.pop (x)
-		self.progressBar.setRange (0, len(self.files))
-	
+
+	def clear (self):
+		self.fileList.clear()
+		self.files = []
+		self.status.setText ('')
+
 	def getSaveFile (self):
 		self.saveEdit.setText ( QFileDialog(self).getSaveFileName() )
 
 	def join (self):
-		self.thread.start()
+		self.buttonOk.setEnabled (False)
+		self.buttonCancel.setText ('Cancel')
+		self.joinThread.start()
 	
 	def setStatus (self):
-		if self.thread.done:
-			self.status.setText ('Complete!')
+		self.buttonOk.setEnabled (True)
+		self.buttonCancel.setText ('Close')
+		if self.joinThread.done:
+			self.status.setText ('Complete')
 
 app = QApplication (sys.argv)
 dlg = JoinDlg()
