@@ -36,6 +36,7 @@ class Download (QThread):
 	def run (self):
 		if not self.dialog.chdir ():
 			return None
+		self.dialog.pbar.setRange (0, 0)
 		self.dialog.status.setText ('Looking up...')
 		url = str( self.dialog.urlEdit.text() )
 		singleUser = self.dialog.singleUser.checkState()==Qt.Checked
@@ -62,6 +63,9 @@ class Download (QThread):
 			return self.raiseError ('Error: The URL entered is invalid.')
 		except:
 			return self.raiseError ('Unknown error. Retry downloading.')
+		self.dialog.pbar.setRange (0, 10)
+		print 'range set'
+		self.dialog.status.setText ('Downloading...')
 		if not singleUser:
 			total_users = self.dialog.totalCombo.currentIndex()+1
 			curr_user = self.dialog.currSpin.value()-1
