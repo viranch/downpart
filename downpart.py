@@ -31,7 +31,6 @@ class Download (QThread):
 		super (Download, self).__init__(parent)
 		self.dialog = dialog
 		self.pbar = QProgressBar()
-		self.connect (self.pbar, SIGNAL('valueChanged(int)'), self.dialog.pbar, SLOT('setValue(int)'))
 	
 	def run (self):
 		if not self.dialog.chdir ():
@@ -175,6 +174,7 @@ class DownDlg (QDialog):
 		self.connect (self.totalCombo, SIGNAL('currentIndexChanged(int)'), self.updateRange)
 		self.connect (self.downButton, SIGNAL('clicked()'), self.startDownload)
 		self.connect (self.closeButton, SIGNAL('clicked()'), self, SLOT('close()'))
+		self.connect (self.downThread.pbar, SIGNAL('valueChanged(int)'), self.pbar, SLOT('setValue(int)'))
 		self.connect (self.downThread, SIGNAL('finished()'), self.restoreState)
 	
 	def updateRange (self):

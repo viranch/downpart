@@ -11,7 +11,6 @@ class Join (QThread):
 		self.parent = parent
 		self.done = False
 		self.progress = QProgressBar()
-		self.parent.connect (self.progress, SIGNAL('valueChanged(int)'), self.parent.progressBar, SLOT('setValue(int)'))
 	
 	def run (self):
 		try:
@@ -105,6 +104,7 @@ class JoinDlg (QDialog):
 		self.connect (saveButton, SIGNAL('clicked()'), self.getSaveFile)
 		self.connect (self.buttonOk, SIGNAL('clicked()'), self.join)
 		self.connect (self.buttonCancel, SIGNAL('clicked()'), self, SLOT('close()'))
+		self.connect (self.joinThread.progress, SIGNAL('valueChanged(int)'), self.progressBar, SLOT('setValue(int)'))
 		self.connect (self.joinThread, SIGNAL('finished()'), self.setStatus)
 
 	def getFiles (self):
