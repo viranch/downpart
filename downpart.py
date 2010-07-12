@@ -27,22 +27,23 @@ def qtBytes (size):
 
 class Download (QThread):
 	
-	def __init__ (self, dialog, parent=None):
+	def __init__ (self, parent=None):
 		super (Download, self).__init__(parent)
-		self.dialog = dialog
+		self.parent = parent
 		self.pbar = QProgressBar()
+		self.done_size = QSpinBox()
 	
 	def run (self):
-		if not self.dialog.chdir ():
+		if not self.parent.chdir ():
 			return None
-		self.dialog.pbar.setRange (0, 0)
-		self.dialog.status.setText ('Looking up...')
-		url = str( self.dialog.urlEdit.text() )
-		singleUser = self.dialog.singleUser.checkState()==Qt.Checked
+		self.parent.pbar.setRange (0, 0)
+		self.parent.status.setText ('Looking up...')
+		url = str( self.parent.urlEdit.text() )
+		singleUser = self.parent.singleUser.checkState()==Qt.Checked
 		if 'http://' not in url and url!='':
 			url = 'http://' + url
 		try:
-			supported = True
+			self.supported = True
 			size = int ( urllib2.urlopen( url ).info()['Content-Length'] )
 		except urllib2.HTTPError as error:
 			return self.raiseError ('Error: ' + str(error))
@@ -51,7 +52,7 @@ class Download (QThread):
 		except KeyError:
 			if not singleUser:
 				return self.raiseError ('Error: Server does not support partial downloads.\nTry downloading in single-user mode.')
-			supported = False
+			self.supported = False
 		except ValueError:
 			if url=='':
 				msg = 'Please enter an URL!'
@@ -62,10 +63,10 @@ class Download (QThread):
 			return self.raiseError ('Error: The URL entered is invalid.')
 		except:
 			return self.raiseError ('Unknown error. Retry downloading.')
-		self.dialog.status.setText ('Downloading...')
+		self.parent.status.setText ('Downloading...')
 		if not singleUser:
-			total_users = self.dialog.totalCombo.currentIndex()+1
-			curr_user = self.dialog.currSpin.value()-1
+			total_users = self.parent.totalCombo.currentIndex()+1
+			curr_user = self.parent.currSpin.value()-1
 			partsize = size/total_users
 			if size%total_users != 0:
 				partsize += 1
@@ -76,36 +77,35 @@ class Download (QThread):
 			src = urllib2.urlopen ( request )
 			save = open ( url.split('/')[-1]+'.'+str(curr_user+1) , 'wb' )
 		else:
-			if supported:
+			if self.supported:
 				partsize = size
 			src = urllib2.urlopen ( url )
 			save = open ( url.split('/')[-1], 'wb' )
-		if supported:
-			self.dialog.pbar.setRange (0, partsize)
+		if self.supported:
+			self.parent.pbar.setRange (0, partsize)
 			self.pbar.setRange (0, partsize)
+			self.done_size.setRange (0, partsize)
 			self.pbar.setValue(0)
-			qt_size = qtBytes (partsize)
+			self.qt_size = qtBytes (partsize)
 		else:
-			done_size = 0
+			self.done_size.setRange (0, 10737418240)
+		self.done_size.setValue (0)
 		while True:
 			buff = src.read ( 10240 )
 			sz = len ( buff )
 			if sz == 0:
 				break
 			save.write (buff)
-			if supported:
-				self.pbar.setValue(self.pbar.value()+sz)
-				self.dialog.status.setText (qtBytes(self.pbar.value())+' of '+qt_size)
-			else:
-				done_size += sz
-				self.dialog.status.setText (qtBytes(done_size))
+			self.done_size.setValue ( self.done_size.value()+sz )
+			if self.supported:
+				self.pbar.setValue( self.done_size.value() )
 		save.close()
 		src.close()
-		self.dialog.closeButton.setText ('Close')
-		self.dialog.downButton.setEnabled (True)
+		self.parent.closeButton.setText ('Close')
+		self.parent.downButton.setEnabled (True)
 	
 	def raiseError (self, caption):
-		self.dialog.status.setText (caption)
+		self.parent.status.setText (caption)
 		return None
 
 class DownDlg (QDialog):
@@ -145,7 +145,7 @@ class DownDlg (QDialog):
 		self.downButton.setAutoDefault (True)
 		tmp.addButton (QDialogButtonBox.Close)
 		self.closeButton = tmp.button (QDialogButtonBox.Close)
-		self.downThread = Download (self, self)
+		self.downThread = Download (self)
 		
 		grid = QGridLayout()
 		grid.addWidget (urlLabel, 0, 0)
@@ -174,7 +174,7 @@ class DownDlg (QDialog):
 		self.connect (self.totalCombo, SIGNAL('currentIndexChanged(int)'), self.updateRange)
 		self.connect (self.downButton, SIGNAL('clicked()'), self.startDownload)
 		self.connect (self.closeButton, SIGNAL('clicked()'), self, SLOT('close()'))
-		self.connect (self.downThread.pbar, SIGNAL('valueChanged(int)'), self.pbar, SLOT('setValue(int)'))
+		self.connect (self.downThread.done_size, SIGNAL('valueChanged(int)'), self.updateStatus)
 		self.connect (self.downThread, SIGNAL('finished()'), self.restoreState)
 	
 	def updateRange (self):
@@ -197,6 +197,14 @@ class DownDlg (QDialog):
 		self.downButton.setEnabled (False)
 		self.closeButton.setText ('Cancel')
 		self.downThread.start()
+
+	def updateStatus (self):
+		new_value = self.downThread.done_size.value()
+		if self.downThread.supported:
+			self.pbar.setValue ( new_value )
+			self.status.setText ( qtBytes(new_value)+' of '+self.downThread.qt_size )
+		else:
+			self.status.setText ( qtBytes(new_value) )
 
 	def chdir (self):
 		wd = str(self.dirEdit.text())
