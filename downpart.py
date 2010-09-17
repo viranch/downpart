@@ -63,7 +63,7 @@ class Download (QThread):
 			return self.raiseError ('Error: The URL entered is invalid.')
 		except:
 			return self.raiseError ('Unknown error. Retry downloading.')
-		self.parent.status.setText ('Downloading...')
+		self.parent.status.setText ('Found. Connecting...')
 		if not singleUser:
 			total_users = self.parent.totalCombo.currentIndex()+1
 			curr_user = self.parent.currSpin.value()-1
@@ -90,6 +90,7 @@ class Download (QThread):
 		else:
 			self.done_size.setRange (0, 10737418240)
 		self.done_size.setValue (0)
+		self.parent.status.setText ('Downloading...')
 		while True:
 			buff = src.read ( 10240 )
 			sz = len ( buff )
