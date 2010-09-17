@@ -6,18 +6,6 @@ import urllib2
 import httplib
 import os
 
-def mkdir (path):
-	mk = []
-	while True:
-		toks = path.split('/')
-		mk.append ( toks.pop() )
-		path = '/'.join(toks)
-		if os.access ( path, os.F_OK ):
-			break
-	while len(mk)>0:
-		path += '/'+mk.pop()
-		os.mkdir ( path )
-
 def qtBytes (size):
 	if size>=(1024*1024):
 		qtString = str.format ('{0:.2f} MB', size/1024.0/1024.0)
@@ -30,41 +18,47 @@ class Download (QThread):
 	def __init__ (self, parent=None):
 		super (Download, self).__init__(parent)
 		self.parent = parent
-		self.pbar = QProgressBar()
-		self.done_size = QSpinBox()
 	
 	def run (self):
 		if not self.parent.chdir ():
 			return None
-		self.parent.pbar.setRange (0, 0)
-		self.parent.status.setText ('Looking up...')
+		self.emit (SIGNAL('setSize(int)'), 0)
+		self.setStatus ('Looking up...')
 		url = str( self.parent.urlEdit.text() )
-		singleUser = self.parent.singleUser.checkState()==Qt.Checked
+		singleUser = self.parent.singleUser.isChecked()
 		if 'http://' not in url and url!='':
 			url = 'http://' + url
+		
 		try:
 			self.supported = True
-			size = int ( urllib2.urlopen( url ).info()['Content-Length'] )
+			src = urllib2.urlopen( url )
 		except urllib2.HTTPError as error:
-			return self.raiseError ('Error: ' + str(error))
+			return self.setStatus ('Error: ' + str(error))
 		except urllib2.URLError as error:
-			return self.raiseError ('Error: Could not lookup name or service.')
-		except KeyError:
-			if not singleUser:
-				return self.raiseError ('Error: Server does not support partial downloads.\nTry downloading in single-user mode.')
-			self.supported = False
+			return self.setStatus ('Error: Could not lookup name or service.')
 		except ValueError:
 			if url=='':
 				msg = 'Please enter an URL!'
 			else:
 				msg = 'The URL entered is invalid.'
-			return self.raiseError ('Error:' + msg)		
+			return self.setStatus ('Error:' + msg)
 		except httplib.InvalidURL:
-			return self.raiseError ('Error: The URL entered is invalid.')
+			return self.setStatus ('Error: The URL entered is invalid.')
 		except:
-			return self.raiseError ('Unknown error. Retry downloading.')
-		self.parent.status.setText ('Found. Connecting...')
+			return self.setStatus ('Unknown error. Retry downloading.')
+		
+		try:
+			size = int ( src.info()['Content-Length'] )
+		except KeyError:
+			if not singleUser:
+				return self.setStatus ('Error: Server does not support partial downloads.\nTry downloading in single-user mode.')
+			self.supported = False
+			partsize = 0
+		
+		self.setStatus ('Found. Connecting...')
+		
 		if not singleUser:
+			src.close()
 			total_users = self.parent.totalCombo.currentIndex()+1
 			curr_user = self.parent.currSpin.value()-1
 			partsize = size/total_users
@@ -79,33 +73,27 @@ class Download (QThread):
 		else:
 			if self.supported:
 				partsize = size
-			src = urllib2.urlopen ( url )
 			save = open ( url.split('/')[-1], 'wb' )
-		if self.supported:
-			self.parent.pbar.setRange (0, partsize)
-			self.pbar.setRange (0, partsize)
-			self.done_size.setRange (0, partsize)
-			self.pbar.setValue(0)
-			self.qt_size = qtBytes (partsize)
-		else:
-			self.done_size.setRange (0, 10737418240)
-		self.done_size.setValue (0)
-		self.parent.status.setText ('Downloading...')
-		while True:
-			buff = src.read ( 10240 )
+		self.qt_size = qtBytes (partsize)
+		self.emit (SIGNAL('setSize(int)'), partsize)
+		self.setStatus ('Downloading...')
+		done_size = 0
+		while done_size<partsize or not self.supported:
+			buff = src.read ( 1024 )
 			sz = len ( buff )
-			if sz == 0:
+			if sz == 0 and not self.supported:
+				self.emit(SIGNAL('setSize(int)'), done_size)
+				self.supported = True
+				self.qt_size = qtBytes (done_size)
+				self.emit(SIGNAL('doneBytes(int)'), done_size)
 				break
 			save.write (buff)
-			self.done_size.setValue ( self.done_size.value()+sz )
-			if self.supported:
-				self.pbar.setValue( self.done_size.value() )
+			done_size += sz
+			self.emit (SIGNAL('doneBytes(int)'), done_size)
 		save.close()
 		src.close()
-		self.parent.closeButton.setText ('Close')
-		self.parent.downButton.setEnabled (True)
 	
-	def raiseError (self, caption):
+	def setStatus (self, caption):
 		self.parent.status.setText (caption)
 		return None
 
@@ -128,7 +116,7 @@ class DownDlg (QDialog):
 		browseButton.setMaximumWidth (30)
 		self.totalLabel = QLabel ('&Divide into')
 		self.totalCombo = QComboBox()
-		self.totalCombo.addItems(['1','2','3','4','5','6','7','8','9','10'])
+		self.totalCombo.addItems( ['1','2','3','4','5','6','7','8','9','10'] )
 		self.totalCombo.setToolTip ('Set the number of total users going to be downloading the file')
 		self.totalLabel.setBuddy (self.totalCombo)
 		self.currLabel = QLabel ('parts, and download &part')
@@ -137,6 +125,7 @@ class DownDlg (QDialog):
 		self.currSpin.setToolTip ('Select the current user out of the total users for whom you want to download the file')
 		self.currLabel.setBuddy (self.currSpin)
 		self.pbar = QProgressBar()
+		self.pbar.setMinimum(0)
 		self.status = QLabel ()
 		self.status.setAlignment (Qt.AlignHCenter | Qt.AlignVCenter)
 		tmp.addButton (QDialogButtonBox.Apply)
@@ -175,14 +164,15 @@ class DownDlg (QDialog):
 		self.connect (self.totalCombo, SIGNAL('currentIndexChanged(int)'), self.updateRange)
 		self.connect (self.downButton, SIGNAL('clicked()'), self.startDownload)
 		self.connect (self.closeButton, SIGNAL('clicked()'), self, SLOT('close()'))
-		self.connect (self.downThread.done_size, SIGNAL('valueChanged(int)'), self.updateStatus)
+		self.connect (self.downThread, SIGNAL('setSize(int)'), self.pbarSetMaximum)
+		self.connect (self.downThread, SIGNAL('doneBytes(int)'), self.updateStatus)
 		self.connect (self.downThread, SIGNAL('finished()'), self.restoreState)
 	
-	def updateRange (self):
-		self.currSpin.setRange (1, self.totalCombo.currentIndex()+1)
+	def updateRange (self, index):
+		self.currSpin.setRange (1, index+1)
 
-	def toggleSingleUser (self):
-		state = self.singleUser.checkState() != Qt.Checked
+	def toggleSingleUser (self, state):
+		state = not state
 		self.totalLabel.setEnabled (state)
 		self.totalCombo.setEnabled (state)
 		self.currLabel.setEnabled (state)
@@ -199,13 +189,15 @@ class DownDlg (QDialog):
 		self.closeButton.setText ('Cancel')
 		self.downThread.start()
 
-	def updateStatus (self):
-		new_value = self.downThread.done_size.value()
+	def pbarSetMaximum (self, size):
+		self.pbar.setMaximum (size)
+		if size>0:
+			self.pbar.setFormat ( "%p% of "+self.downThread.qt_size )
+
+	def updateStatus (self, done_size):
 		if self.downThread.supported:
-			self.pbar.setValue ( new_value )
-			self.status.setText ( qtBytes(new_value)+' of '+self.downThread.qt_size )
-		else:
-			self.status.setText ( qtBytes(new_value) )
+			self.pbar.setValue ( done_size )
+		self.status.setText ( qtBytes(done_size)+' downloaded' )
 
 	def chdir (self):
 		wd = str(self.dirEdit.text())
@@ -221,7 +213,7 @@ class DownDlg (QDialog):
 					ch = QMessageBox.question (self, 'Not found', str(error)[start:]+'\nDo you want to create it?', QMessageBox.Yes|QMessageBox.No, QMessageBox.Yes)
 					if ch==QMessageBox.Yes:
 						try:
-							mkdir (wd)
+							os.makedirs (wd)
 							os.chdir (wd)
 							return True
 						except OSError as error:
@@ -235,8 +227,9 @@ class DownDlg (QDialog):
 		self.downButton.setEnabled (True)
 		self.closeButton.setText ('Close')
 
-app = QApplication(sys.argv)
-main = DownDlg()
-main.show()
-app.exec_()
+if __name__=='__main__':
+	app = QApplication(sys.argv)
+	main = DownDlg()
+	main.show()
+	app.exec_()
 
